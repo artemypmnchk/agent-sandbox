@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Разработка — чат Пачки</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Courier New', monospace;
+      background: #0d1117;
+      color: #c9d1d9;
+      overflow-x: hidden;
+      min-height: 100vh;
+    }
+
+    /* === ФОНОВАЯ МАТРИЦА === */
+    #matrix-canvas {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 0;
+      opacity: 0.18;
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 40px 20px 80px;
+    }
+
+    /* === ЗАГОЛОВОК === */
+    .hero {
+      text-align: center;
+      padding: 60px 0 50px;
+    }
+
+    .hero h1 {
+      font-size: 3rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #58a6ff, #79c0ff, #a5d6ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: shimmer 3s infinite;
+    }
+
+    @keyframes shimmer {
+      0%, 100% { filter: brightness(1); }
+      50% { filter: brightness(1.3); }
+    }
+
+    .hero .subtitle {
+      margin-top: 12px;
+      color: #8b949e;
+      font-size: 1rem;
+      animation: fadeInUp 1s ease 0.3s both;
+    }
+
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* === СООБЩЕНИЯ === */
+    .messages {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .msg {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 12px;
+      padding: 18px 22px;
+      animation: slideIn 0.5s ease both;
+      transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+      cursor: default;
+    }
+
+    .msg:hover {
+      transform: translateX(6px);
+      box-shadow: -4px 0 20px rgba(88, 166, 255, 0.15);
+      border-color: #58a6ff;
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(-30px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    /* задержки для каскадного появления */
+    .msg:nth-child(1) { animation-delay: 0.1s; }
+    .msg:nth-child(2) { animation-delay: 0.2s; }
+    .msg:nth-child(3) { animation-delay: 0.3s; }
+    .msg:nth-child(4) { animation-delay: 0.4s; }
+    .msg:nth-child(5) { animation-delay: 0.5s; }
+    .msg:nth-child(6) { animation-delay: 0.6s; }
+
+    .msg-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .avatar {
+      width: 34px; height: 34px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.85rem;
+      font-weight: 700;
+      flex-shrink: 0;
+      animation: pulse 3s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(88,166,255,0.4); }
+      50% { box-shadow: 0 0 0 6px rgba(88,166,255,0); }
+    }
+
+    .avatar.blue   { background: #1f6feb; color: #fff; }
+    .avatar.green  { background: #238636; color: #fff; }
+    .avatar.purple { background: #8957e5; color: #fff; }
+    .avatar.bot    { background: #da3633; color: #fff; }
+
+    .author { font-weight: 600; font-size: 0.9rem; color: #e6edf3; }
+    .ts { font-size: 0.78rem; color: #6e7681; margin-left: auto; }
+
+    .msg-body {
+      font-size: 0.92rem;
+      line-height: 1.6;
+      color: #c9d1d9;
+    }
+
+    .msg-body code, .msg-body pre {
+      font-family: 'Courier New', monospace;
+    }
+
+    /* === КОД-БЛОК === */
+    .code-block {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-top: 10px;
+      overflow-x: auto;
+      position: relative;
+    }
+
+    .code-block::before {
+      content: 'Python';
+      position: absolute;
+      top: 8px; right: 12px;
+      font-size: 0.7rem;
+      color: #6e7681;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .code-line {
+      display: block;
+      line-height: 1.7;
+      white-space: pre;
+    }
+
+    .kw  { color: #ff7b72; }   /* ключевые слова */
+    .fn  { color: #d2a8ff; }   /* функции */
+    .st  { color: #a5d6ff; }   /* строки */
+    .cm  { color: #6e7681; font-style: italic; } /* комментарии */
+    .nb  { color: #79c0ff; }   /* числа/встроенные */
+    .op  { color: #ffa657; }   /* операторы */
+
+    /* === TYPING ANIMATION === */
+    .typing-msg {
+      display: flex; align-items: center; gap: 6px;
+      margin-top: 6px;
+    }
+    .typing-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #58a6ff;
+      animation: bounce 1.2s infinite;
+    }
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes bounce {
+      0%, 80%, 100% { transform: translateY(0); opacity: 0.5; }
+      40% { transform: translateY(-6px); opacity: 1; }
+    }
+
+    /* === ТЕГИ/БЕЙДЖИ === */
+    .badge {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      margin-right: 6px;
+    }
+    .badge-bot { background: #da363322; color: #f85149; border: 1px solid #da363355; }
+    .badge-new { background: #23863622; color: #3fb950; border: 1px solid #23863655; }
+
+    /* === ФУТЕР === */
+    .footer {
+      text-align: center;
+      margin-top: 60px;
+      color: #6e7681;
+      font-size: 0.82rem;
+      animation: fadeInUp 1s ease 1.5s both;
+    }
+
+    /* === FLOATING PARTICLES === */
+    .particle {
+      position: fixed;
+      border-radius: 50%;
+      pointer-events: none;
+      animation: float linear infinite;
+      z-index: 0;
+      opacity: 0.4;
+    }
+    @keyframes float {
+      from { transform: translateY(100vh) scale(0.5); opacity: 0; }
+      10%  { opacity: 0.4; }
+      90%  { opacity: 0.4; }
+      to   { transform: translateY(-10vh) scale(1); opacity: 0; }
+    }
+
+    /* === SCROLLBAR === */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #0d1117; }
+    ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<!-- Матричный фон -->
+<canvas id="matrix-canvas"></canvas>
+
+<!-- Частицы -->
+<div id="particles"></div>
+
+<div class="container">
+
+  <div class="hero">
+    <h1># Разработка</h1>
+    <p class="subtitle">чат команды в Пачке · последние сообщения</p>
+  </div>
+
+  <div class="messages">
+
+    <!-- Сообщение 1: приветствие -->
+    <div class="msg">
+      <div class="msg-meta">
+        <div class="avatar blue">АГ</div>
+        <span class="author">Артемий Гончаров</span>
+        <span class="ts">27 янв</span>
+      </div>
+      <div class="msg-body">
+        Привет! В этом чате будем обсуждать и решать проблемки, которые у нас появляются во время работы.
+        Если вам кто-то что-то сбросил или сами что-то заметили — пишите сюда 🛠
+      </div>
+    </div>
+
+    <!-- Сообщение 2: пересылка -->
+    <div class="msg">
+      <div class="msg-meta">
+        <div class="avatar purple">ДЛ</div>
+        <span class="author">lucitskii</span>
+        <span class="ts">27 янв</span>
+      </div>
+      <div class="msg-body">
+        <strong>По пересылке upd:</strong><br>
+        — открытые каналы (где ты не участник) — не выдаём<br>
+        — открытые беседы — выдаём (с добавлением участника)<br>
+        — каналы с ролью «подписчик» — не выдаём<br><br>
+        На клиентах такое не сделать нормально, поэтому будет скрыто в логике ручки пересылки. Считаем это норм.
+      </div>
+    </div>
+
+    <!-- Сообщение 3: код Python -->
+    <div class="msg">
+      <div class="msg-meta">
+        <div class="avatar blue">АГ</div>
+        <span class="author">Артемий Гончаров</span>
+        <span class="ts">27 янв</span>
+      </div>
+      <div class="msg-body">
+        Ну и тут давайте не жестить, попроще можно сделать же:
+        <div class="code-block">
+<span class="code-line"><span class="kw">def</span> <span class="fn">chunk</span>(my_list, size):</span>
+<span class="code-line">    <span class="kw">return</span> [my_list[i:i+size] <span class="kw">for</span> i <span class="kw">in</span> <span class="nb">range</span>(<span class="nb">0</span>, <span class="nb">len</span>(my_list), size)]</span>
+<span class="code-line"></span>
+<span class="code-line">my_list = [<span class="nb">1</span>, <span class="nb">2</span>, <span class="nb">3</span>, <span class="nb">4</span>, <span class="nb">5</span>, <span class="nb">6</span>]</span>
+<span class="code-line">chunk(my_list, <span class="nb">2</span>) <span class="cm"># [[1, 2], [3, 4], [5, 6]]</span></span>
+<span class="code-line"></span>
+<span class="code-line"><span class="kw">def</span> <span class="fn">merge</span>(dic1, dic2):</span>
+<span class="code-line">    dic3 = dic1.<span class="fn">copy</span>()</span>
+<span class="code-line">    dic3.<span class="fn">update</span>(dic2)</span>
+<span class="code-line">    <span class="kw">return</span> dic3</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Сообщение 4: ссылка на Ruby -->
+    <div class="msg">
+      <div class="msg-meta">
+        <div class="avatar blue">АГ</div>
+        <span class="author">Артемий Гончаров</span>
+        <span class="ts">27 янв</span>
+      </div>
+      <div class="msg-body">
+        Нашёл классные уроки по Ruby, там для джунов много полезного.
+        Можно будет потом стажёрам кидать, чтобы они скиллы подтягивали.<br>
+        <a href="https://www.youtube.com/watch?v=lhRAK_bwaeo" style="color:#58a6ff; text-decoration:none;">
+          ▶ YouTube: Ruby для джунов
+        </a>
+      </div>
+    </div>
+
+    <!-- Сообщение 5: анонс бота -->
+    <div class="msg">
+      <div class="msg-meta">
+        <div class="avatar green">АГ</div>
+        <span class="author">Артемий Гончаров</span>
+        <span class="ts">27 янв</span>
+        <span class="badge badge-new">новость</span>
+      </div>
+      <div class="msg-body">
+        Ребят, встречаем новый бот, который собрала @pitatelevam! 🥳<br>
+        <span class="badge badge-bot">@Бот отпусков</span> — теперь все отпуска согласовываем через него.
+        Анонс в канале новостей позже, но тестить можно уже сейчас.
+        <div class="typing-msg" style="margin-top: 14px;">
+          <span style="color:#6e7681; font-size:0.8rem;">Бот отпусков печатает</span>
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Сообщение 6: свежее -->
+    <div class="msg">
+      <div class="msg-meta">
+        <div class="avatar blue">АГ</div>
+        <span class="author">Артемий Гончаров</span>
+        <span class="ts">20 июл</span>
+      </div>
+      <div class="msg-body">
+        <strong>***апап***</strong>
+      </div>
+    </div>
+
+  </div><!-- /.messages -->
+
+  <div class="footer">
+    Пачка · чат «Разработка» · данные актуальны на 20 июл 2026
+  </div>
+
+</div><!-- /.container -->
+
+<script>
+  // === МАТРИЦА ===
+  const canvas = document.getElementById('matrix-canvas');
+  const ctx = canvas.getContext('2d');
+  let W, H, cols, drops;
+
+  function initMatrix() {
+    W = canvas.width  = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+    cols  = Math.floor(W / 16);
+    drops = Array(cols).fill(1);
+  }
+  initMatrix();
+  window.addEventListener('resize', initMatrix);
+
+  const chars = 'アイウエオカキクケコサシスセソタチツテトナニヌネノ0123456789ABCDEF{}[]();=>/*+-';
+
+  function drawMatrix() {
+    ctx.fillStyle = 'rgba(13,17,23,0.05)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#58a6ff';
+    ctx.font = '14px Courier New';
+
+    for (let i = 0; i < cols; i++) {
+      const char = chars[Math.floor(Math.random() * chars.length)];
+      ctx.fillText(char, i * 16, drops[i] * 16);
+      if (drops[i] * 16 > H && Math.random() > 0.975) drops[i] = 0;
+      drops[i]++;
+    }
+  }
+  setInterval(drawMatrix, 50);
+
+  // === ЧАСТИЦЫ ===
+  const particlesEl = document.getElementById('particles');
+  const colors = ['#58a6ff', '#3fb950', '#d2a8ff', '#ffa657', '#f85149'];
+
+  for (let i = 0; i < 25; i++) {
+    const p = document.createElement('div');
+    p.className = 'particle';
+    const size = Math.random() * 6 + 3;
+    const duration = Math.random() * 15 + 10;
+    const delay = Math.random() * 15;
+    const left = Math.random() * 100;
+    const color = colors[Math.floor(Math.random() * colors.length)];
+
+    p.style.cssText = `
+      width: ${size}px; height: ${size}px;
+      left: ${left}%;
+      animation-duration: ${duration}s;
+      animation-delay: -${delay}s;
+      background: ${color};
+      box-shadow: 0 0 ${size * 2}px ${color};
+    `;
+    particlesEl.appendChild(p);
+  }
+
+  // === HOVER SOUND EFFECT (visual feedback) ===
+  document.querySelectorAll('.msg').forEach(msg => {
+    msg.addEventListener('mouseenter', () => {
+      msg.style.transition = 'transform 0.2s, box-shadow 0.2s, border-color 0.2s';
+    });
+  });
+</script>
+
+</body>
+</html>
